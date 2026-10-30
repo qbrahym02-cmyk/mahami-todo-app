@@ -80,7 +80,9 @@ jobs:
             --build-number=${{ steps.v.outputs.build }}
           cp build/app/outputs/flutter-apk/app-release.apk todo-app.apk
           # تأكد أن APK موقّع بمفتاحنا وليس بمفتاح debug
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs todo-app.apk | grep -q "CN=Todo App" \
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs todo-app.apk | tee /tmp/certs.txt
+          grep -q "CN=Todo App" /tmp/certs.txt \
             || { echo "::error::APK غير موقّع بمفتاح الإصدار"; exit 1; }
 
       - name: Publish GitHub Release

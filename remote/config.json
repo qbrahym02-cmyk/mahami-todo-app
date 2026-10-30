@@ -1,0 +1,29 @@
+{
+  "app_title": "مهامي",
+  "primary_color": "#6750A4",
+  "theme_mode": "system",
+
+  "announcement": {
+    "enabled": true,
+    "type": "info",
+    "text": "أهلاً بك! هذه الرسالة تأتي من GitHub — عدّلها في remote/config.json وستتغيّر عندك بدون تحديث."
+  },
+
+  "maintenance": {
+    "enabled": false,
+    "message": "نعمل على تحسينات، نعود قريباً 🔧"
+  },
+
+  "features": {
+    "priorities": true,
+    "due_dates": true,
+    "categories": true,
+    "stats": true
+  },
+
+  "categories": ["عمل", "شخصي", "تسوق", "دراسة"],
+
+  "empty_state_text": "لا توجد مهام بعد — اضغط + لإضافة أول مهمة",
+
+  "min_supported_version": "1.0.0"
+}

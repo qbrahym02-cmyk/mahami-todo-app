@@ -1,0 +1,93 @@
+# ينشر إصدار أندرويد جديد → كل التطبيقات المثبّتة ستعرض "يتوفر تحديث".
+# طريقتان للتشغيل:
+#   1) من GitHub: Actions → "Release Android" → Run workflow → اكتب رقم الإصدار والملاحظات.
+#   2) من الطرفية: git tag v1.0.1 && git push origin v1.0.1
+name: Release Android
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'رقم الإصدار الجديد (مثال 1.0.1) — يجب أن يكون أكبر من الحالي'
+        required: true
+      notes:
+        description: 'ما الجديد؟ (يظهر للمستخدم في نافذة التحديث)'
+        required: false
+        default: 'تحسينات وإصلاحات'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          VERSION="${VERSION#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::رقم الإصدار يجب أن يكون بصيغة 1.2.3"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # versionCode يجب أن يزيد دائماً حتى يقبل أندرويد التحديث
+          echo "build=$(( ${{ github.run_number }} + 100 ))" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 غير موجود"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+
+      - run: flutter pub get
+      - run: flutter test
+
+      - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: upload
+        run: |
+          flutter build apk --release \
+            --build-name=${{ steps.v.outputs.version }} \
+            --build-number=${{ steps.v.outputs.build }}
+          cp build/app/outputs/flutter-apk/app-release.apk todo-app.apk
+          # تأكد أن APK موقّع بمفتاحنا وليس بمفتاح debug
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs todo-app.apk | grep -q "CN=Todo App" \
+            || { echo "::error::APK غير موقّع بمفتاح الإصدار"; exit 1; }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: v${{ steps.v.outputs.version }}
+          body: ${{ github.event.inputs.notes || 'تحسينات وإصلاحات' }}
+          files: todo-app.apk
+          make_latest: true
